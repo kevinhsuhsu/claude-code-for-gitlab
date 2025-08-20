@@ -122,16 +122,6 @@ export function prepareRunConfig(
 export async function runClaude(promptPath: string, options: ClaudeOptions) {
   const config = prepareRunConfig(promptPath, options);
 
-  // Create a named pipe
-  try {
-    await unlink(PIPE_PATH);
-  } catch (e) {
-    // Ignore if file doesn't exist
-  }
-
-  // Create the named pipe
-  await execAsync(`mkfifo "${PIPE_PATH}"`);
-
   // Log prompt file size
   let promptSize = "unknown";
   try {
@@ -284,11 +274,12 @@ To set these in GitLab:
   // Add process spawn success indicator
   claudeProcess.on("spawn", () => {
     console.log("✅ Claude CLI process spawned successfully");
+    console.log(`Claude command: claude ${config.claudeArgs.join(' ')}`);
   });
 
-  // Add early exit detection
+  // Add early exit detection  
   claudeProcess.on("close", (code, signal) => {
-    console.log(`Claude process exited early with code: ${code}, signal: ${signal}`);
+    console.log(`🔚 Claude process closed with code: ${code}, signal: ${signal}`);
   });
 
   // Capture output for parsing execution metrics
@@ -337,29 +328,55 @@ To set these in GitLab:
   // Pipe from named pipe to Claude
   console.log("Starting pipe process to connect named pipe to Claude stdin...");
   const pipeProcess = spawn("cat", [PIPE_PATH]);
-  pipeProcess.stdout.pipe(claudeProcess.stdin);
   
   pipeProcess.on("spawn", () => {
     console.log("✅ Pipe process spawned successfully");
+    // Connect the pipe to Claude stdin after spawn
+    pipeProcess.stdout.pipe(claudeProcess.stdin);
+    console.log("🔗 Connected pipe output to Claude stdin");
   });
 
   pipeProcess.on("close", (code) => {
-    console.log(`Pipe process finished with code: ${code}`);
+    console.log(`🔚 Pipe process closed with code: ${code}`);
   });
 
-  // Handle pipe process errors
   pipeProcess.on("error", (error: any) => {
-    console.error("Error reading from named pipe:", error);
+    console.error("❌ Error in pipe process:", error);
     claudeProcess.kill("SIGTERM");
   });
+
+  // Monitor Claude stdin events
+  claudeProcess.stdin.on("error", (error: any) => {
+    console.error("❌ Error writing to Claude stdin:", error);
+  });
+
+  claudeProcess.stdin.on("close", () => {
+    console.log("🔚 Claude stdin closed");
+  });
+
+  // Add periodic status checks
+  const statusInterval = setInterval(() => {
+    if (!hasReceivedOutput) {
+      console.log("⏳ Waiting for Claude CLI response...");
+    }
+  }, 5000);
 
   // Add a timeout check to see if we're getting stuck
   setTimeout(() => {
     if (!hasReceivedOutput) {
       console.error("⚠️  No output received from Claude after 10 seconds - process may be stuck");
       console.error("This usually indicates authentication or network issues");
+      console.log("Debug info:");
+      console.log(`- Claude process PID: ${claudeProcess.pid}`);
+      console.log(`- Pipe process PID: ${pipeProcess.pid}`);
+      console.log(`- Cat process PID: ${catProcess.pid}`);
     }
   }, 10000);
+
+  // Clear status interval when we get output
+  claudeProcess.stdout.once("data", () => {
+    clearInterval(statusInterval);
+  });
 
   // Wait for Claude to finish with timeout
   let timeoutMs = 10 * 60 * 1000; // Default 10 minutes
