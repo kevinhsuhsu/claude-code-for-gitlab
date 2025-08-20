@@ -640,7 +640,7 @@ ${s.suggestion}
     const payload = parseGitLabWebhookPayload();
     if (!payload) {
       console.log("No GitLab webhook payload found");
-      console.log("directPrompt");
+      console.log(`directPrompt: ${directPrompt}`);
       return !!directPrompt;
     }
 
