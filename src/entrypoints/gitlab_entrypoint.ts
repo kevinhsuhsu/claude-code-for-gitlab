@@ -164,13 +164,26 @@ async function runExecutePhase(
 
     // Run the base-action
     const baseActionScript = path.join(baseActionPath, "src", "index.ts");
-    const executeResult = await $`bun run ${baseActionScript}`.env(env).quiet();
+    console.log("Running base action script...");
+    console.log(`Script path: ${baseActionScript}`);
+    console.log("Environment variables:");
+    console.log(`- ANTHROPIC_MODEL: ${env.ANTHROPIC_MODEL}`);
+    console.log(`- CLAUDE_CODE_OAUTH_TOKEN: ${env.CLAUDE_CODE_OAUTH_TOKEN ? 'SET' : 'NOT SET'}`);
+    console.log(`- ANTHROPIC_API_KEY: ${env.ANTHROPIC_API_KEY ? 'SET' : 'NOT SET'}`);
+    console.log(`- INPUT_PROMPT_FILE: ${env.INPUT_PROMPT_FILE}`);
+    console.log("Starting base-action execution...");
+    
+    const executeResult = await $`bun run ${baseActionScript}`.env(env).timeout(300000); // 5 min timeout
 
-    // Print output regardless of exit code
+    // Print output regardless of exit code (removed .quiet() for debugging)
+    console.log("=== Base-action stdout ===");
     console.log(executeResult.stdout.toString());
+    console.log("=== Base-action stderr ===");
     if (executeResult.stderr.toString()) {
       console.error(executeResult.stderr.toString());
     }
+    console.log("=== Base-action exit code ===");
+    console.log(`Exit code: ${executeResult.exitCode}`);
 
     const outputFile = getClaudeExecutionOutputPath();
 
