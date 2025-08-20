@@ -89,7 +89,8 @@ async function runExecutePhase(
     console.log("Phase 2: Installing Claude Code...");
     console.log("=========================================");
 
-    // Install Claude Code globally
+    // Install Claude Code globally and Claude CLI
+    console.log("Installing Claude Code...");
     const installResult =
       await $`bun install -g @anthropic-ai/claude-code@1.0.60`;
     console.log(installResult.stdout.toString());
@@ -98,6 +99,18 @@ async function runExecutePhase(
       throw new Error(
         `Failed to install Claude Code: ${installResult.stderr.toString()}`,
       );
+    }
+
+    console.log("Installing Claude CLI...");
+    const claudeInstallResult =
+      await $`npm install -g @anthropic-ai/cli@latest`;
+    console.log(claudeInstallResult.stdout.toString());
+
+    if (claudeInstallResult.exitCode !== 0) {
+      console.log("Warning: Failed to install Claude CLI, trying alternative...");
+      // Try alternative installation
+      const altInstallResult = await $`npm install -g claude-cli`;
+      console.log(altInstallResult.stdout.toString());
     }
 
     console.log("=========================================");
