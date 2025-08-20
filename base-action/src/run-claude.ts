@@ -149,6 +149,73 @@ export async function runClaude(promptPath: string, options: ClaudeOptions) {
     console.log(`Custom environment variables: ${envKeys}`);
   }
 
+  // Check authentication before proceeding
+  const hasAnthropicKey = !!(process.env.ANTHROPIC_API_KEY || config.env.ANTHROPIC_API_KEY);
+  const hasOAuthToken = !!(process.env.CLAUDE_CODE_OAUTH_TOKEN || config.env.CLAUDE_CODE_OAUTH_TOKEN);
+  
+  console.log("=== Authentication Status ===");
+  console.log(`ANTHROPIC_API_KEY: ${hasAnthropicKey ? 'SET' : 'NOT SET'}`);
+  console.log(`CLAUDE_CODE_OAUTH_TOKEN: ${hasOAuthToken ? 'SET' : 'NOT SET'}`);
+  
+  if (!hasAnthropicKey && !hasOAuthToken) {
+    const errorMsg = `
+❌ Authentication Error: No valid authentication found!
+
+You need to set one of these environment variables in your GitLab CI/CD settings:
+- ANTHROPIC_API_KEY (from https://console.anthropic.com/)
+- CLAUDE_CODE_OAUTH_TOKEN (from Claude Code OAuth)
+
+To set these in GitLab:
+1. Go to your project → Settings → CI/CD
+2. Expand 'Variables' section
+3. Add new variable:
+   - Key: ANTHROPIC_API_KEY
+   - Value: [your API key]
+   - Type: Variable (not File)
+   - Protected: ✓
+   - Masked: ✓
+`;
+    console.error(errorMsg);
+    throw new Error("Authentication required but not found");
+  }
+
+  // Test authentication validity with a simple API call
+  console.log("=== Testing Authentication Validity ===");
+  try {
+    const testEnv = {
+      ...process.env,
+      ...config.env,
+    };
+    
+    console.log("Testing Claude CLI authentication with simple prompt...");
+    const testResult = await execAsync('echo "test" | timeout 30 claude --model sonnet -p', {
+      env: testEnv,
+      timeout: 35000, // 35 second timeout
+    });
+    
+    if (testResult.stdout.includes("I'm Claude") || testResult.stdout.trim().length > 0) {
+      console.log("✅ Authentication test successful - Claude CLI responded");
+    } else {
+      console.log("⚠️  Authentication test unclear - no clear response from Claude");
+    }
+  } catch (error: any) {
+    const errorMsg = error.message || error.toString();
+    
+    if (errorMsg.includes("401") || errorMsg.includes("authentication")) {
+      console.error("❌ Authentication test failed: Invalid API key or token");
+      throw new Error("Authentication token is invalid or expired");
+    } else if (errorMsg.includes("timeout") || error.code === 'ETIMEDOUT') {
+      console.error("❌ Authentication test timed out - possible network or API issues");
+      throw new Error("Unable to connect to Claude API within timeout period");
+    } else if (errorMsg.includes("403")) {
+      console.error("❌ Authentication test failed: Access forbidden - check API key permissions");
+      throw new Error("API key does not have sufficient permissions");
+    } else {
+      console.error(`⚠️  Authentication test failed with error: ${errorMsg}`);
+      console.error("Proceeding anyway, but Claude execution might fail...");
+    }
+  }
+
   // Output to console
   console.log(`Running Claude with prompt from file: ${config.promptPath}`);
 
@@ -164,8 +231,9 @@ export async function runClaude(promptPath: string, options: ClaudeOptions) {
     pipeStream.destroy();
   });
 
+  console.log("Spawning Claude CLI process...");
   const claudeProcess = spawn("claude", config.claudeArgs, {
-    stdio: ["pipe", "pipe", "inherit"],
+    stdio: ["pipe", "pipe", "pipe"], // Capture stderr separately
     env: {
       ...process.env,
       ...config.env,
@@ -173,9 +241,30 @@ export async function runClaude(promptPath: string, options: ClaudeOptions) {
   });
 
   // Handle Claude process errors
-  claudeProcess.on("error", (error) => {
+  claudeProcess.on("error", (error: any) => {
     console.error("Error spawning Claude process:", error);
     pipeStream.destroy();
+  });
+
+  // Monitor Claude stderr for authentication errors
+  claudeProcess.stderr?.on("data", (data: any) => {
+    const errorText = data.toString();
+    console.error(`Claude stderr: ${errorText}`);
+    
+    // Check for common authentication error patterns
+    if (errorText.includes("401") || errorText.includes("Unauthorized") || 
+        errorText.includes("Invalid API key") || errorText.includes("authentication failed")) {
+      console.error("❌ Detected authentication error in Claude output");
+    } else if (errorText.includes("403") || errorText.includes("Forbidden")) {
+      console.error("❌ Detected permission error in Claude output");
+    } else if (errorText.includes("timeout") || errorText.includes("connection")) {
+      console.error("❌ Detected connection error in Claude output");
+    }
+  });
+
+  // Add process spawn success indicator
+  claudeProcess.on("spawn", () => {
+    console.log("✅ Claude CLI process spawned successfully");
   });
 
   // Capture output for parsing execution metrics

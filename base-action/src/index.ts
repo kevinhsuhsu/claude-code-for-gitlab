@@ -21,7 +21,7 @@ async function run() {
       promptFile: process.env.INPUT_PROMPT_FILE || "",
     });
 
-    console.log(`Prompt Config: ${promptConfig}`);
+    console.log("Prompt Config:", JSON.stringify(promptConfig, null, 2));
 
     console.log("Running Claude...");
     await runClaude(promptConfig.path, {
