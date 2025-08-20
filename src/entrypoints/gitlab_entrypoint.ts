@@ -173,7 +173,7 @@ async function runExecutePhase(
     console.log(`- INPUT_PROMPT_FILE: ${env.INPUT_PROMPT_FILE}`);
     console.log("Starting base-action execution...");
     
-    const executeResult = await $`bun run ${baseActionScript}`.env(env).timeout(300000); // 5 min timeout
+    const executeResult = await $`bun run ${baseActionScript}`.env(env); // Remove timeout for debugging
 
     // Print output regardless of exit code (removed .quiet() for debugging)
     console.log("=== Base-action stdout ===");
@@ -415,16 +415,10 @@ async function runUpdatePhase(
   executeResult: PhaseResult,
 ): Promise<PhaseResult> {
   try {
-    // Check if there are any git changes
-    const hasChanges = await checkGitStatus();
-
-    if (hasChanges) {
-      console.log("Git changes detected - creating merge request");
-      await createMergeRequest(prepareResult, executeResult);
-    } else {
-      console.log("No git changes detected - posting Claude's response");
-      await postClaudeResponse(prepareResult, executeResult);
-    }
+    // For now, always post Claude's response instead of creating MR
+    // This avoids Git push permission issues
+    console.log("Posting Claude's response (MR creation disabled for testing)");
+    await postClaudeResponse(prepareResult, executeResult);
 
     // Also update the tracking comment if we have one
     if (!prepareResult.commentId) {
