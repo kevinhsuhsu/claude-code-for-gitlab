@@ -500,6 +500,7 @@ ${directPrompt || "Please help with the requested task."}`;
     }
 
     // Write prompt file with error handling
+    prompt = "hello claude";
     console.log("Start writing into prompt dir...");
     const promptFilePath = `${promptDir}/claude-prompt.txt`;
     console.log(`Writing to: ${promptFilePath}`);
