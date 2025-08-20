@@ -8,15 +8,22 @@ import { validateEnvironmentVariables } from "./validate-env";
 
 async function run() {
   try {
+    console.log("Starting Env validation...")
     validateEnvironmentVariables();
+    console.log("Env validation finished.");
 
+    console.log("Setup Claude Code settings...");
     await setupClaudeCodeSettings(process.env.INPUT_SETTINGS);
+    console.log("Claude Code setup successfully.");
 
     const promptConfig = await preparePrompt({
       prompt: process.env.INPUT_PROMPT || "",
       promptFile: process.env.INPUT_PROMPT_FILE || "",
     });
 
+    console.log(`Prompt Config: ${promptConfig}`);
+
+    console.log("Running Claude...");
     await runClaude(promptConfig.path, {
       allowedTools: process.env.INPUT_ALLOWED_TOOLS,
       disallowedTools: process.env.INPUT_DISALLOWED_TOOLS,
@@ -28,6 +35,7 @@ async function run() {
       fallbackModel: process.env.INPUT_FALLBACK_MODEL,
       model: process.env.ANTHROPIC_MODEL,
     });
+    console.log("Ran Claude successfully.");
   } catch (error) {
     core.setFailed(`Action failed with error: ${error}`);
     core.setOutput("conclusion", "failure");
