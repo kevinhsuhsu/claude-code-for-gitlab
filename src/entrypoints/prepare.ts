@@ -337,9 +337,30 @@ async function runGitLab() {
       );
     }
 
-    // Create prompt directory
+    // Create prompt directory with debugging
     const promptDir = getClaudePromptsDirectory();
     console.log(`Prompt dir: ${promptDir}`);
+    
+    // Check directory permissions
+    const fs = await import("fs");
+    try {
+      const stats = await fs.promises.stat(promptDir);
+      console.log(`Directory exists: ${stats.isDirectory()}`);
+      console.log(`Directory permissions: ${stats.mode.toString(8)}`);
+    } catch (error) {
+      console.log(`Directory doesn't exist yet, will be created`);
+    }
+    
+    // Test write permissions
+    try {
+      const testFile = `${promptDir}/test-write.tmp`;
+      await fs.promises.writeFile(testFile, "test");
+      await fs.promises.unlink(testFile);
+      console.log("✅ Directory write permission confirmed");
+    } catch (error) {
+      console.error("❌ Directory write permission failed:", error);
+      throw new Error(`Cannot write to prompt directory: ${error}`);
+    }
 
     // Extract trigger comment from webhook payload
     let triggerComment = "";
@@ -478,11 +499,24 @@ ${triggerComment ? `The user mentioned you with: "${triggerComment}"` : ""}
 ${directPrompt || "Please help with the requested task."}`;
     }
 
-    // Write prompt file
+    // Write prompt file with error handling
     console.log("Start writing into prompt dir...");
-    const fs = await import("fs");
-    await fs.promises.writeFile(`${promptDir}/claude-prompt.txt`, prompt);
-    console.log("✅ Created prompt file for Claude");
+    const promptFilePath = `${promptDir}/claude-prompt.txt`;
+    console.log(`Writing to: ${promptFilePath}`);
+    
+    try {
+      await fs.promises.writeFile(promptFilePath, prompt);
+      console.log("✅ Created prompt file for Claude");
+      
+      // Verify the file was written correctly
+      const writtenContent = await fs.promises.readFile(promptFilePath, 'utf-8');
+      console.log(`File verification: ${writtenContent.length === prompt.length ? 'SUCCESS' : 'MISMATCH'}`);
+    } catch (writeError) {
+      console.error("❌ Failed to write prompt file:", writeError);
+      console.error("Prompt dir exists:", await fs.promises.access(promptDir).then(() => true).catch(() => false));
+      console.error("File path:", promptFilePath);
+      throw new Error(`Failed to write prompt file: ${writeError}`);
+    }
     console.log(`Prompt file size: ${prompt.length} bytes`);
     console.log("Prompt preview (first 500 chars):");
     console.log(prompt.substring(0, 500));
