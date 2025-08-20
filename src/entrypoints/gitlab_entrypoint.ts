@@ -89,8 +89,8 @@ async function runExecutePhase(
     console.log("Phase 2: Installing Claude Code...");
     console.log("=========================================");
 
-    // Install Claude Code globally and Claude CLI
-    console.log("Installing Claude Code...");
+    // Install Claude Code globally (includes claude CLI binary)
+    console.log("Installing Claude Code with CLI...");
     const installResult =
       await $`bun install -g @anthropic-ai/claude-code@1.0.60`;
     console.log(installResult.stdout.toString());
@@ -101,16 +101,13 @@ async function runExecutePhase(
       );
     }
 
-    console.log("Installing Claude CLI...");
-    const claudeInstallResult =
-      await $`npm install -g @anthropic-ai/cli@latest`;
-    console.log(claudeInstallResult.stdout.toString());
-
-    if (claudeInstallResult.exitCode !== 0) {
-      console.log("Warning: Failed to install Claude CLI, trying alternative...");
-      // Try alternative installation
-      const altInstallResult = await $`npm install -g claude-cli`;
-      console.log(altInstallResult.stdout.toString());
+    // Verify claude CLI is available
+    try {
+      const claudeVersion = await $`claude --version`;
+      console.log("✅ Claude CLI installed successfully:");
+      console.log(claudeVersion.stdout.toString());
+    } catch (error) {
+      console.log("Warning: Claude CLI verification failed, but proceeding...");
     }
 
     console.log("=========================================");
@@ -352,6 +349,38 @@ async function postClaudeResponse(
     const fs = await import("fs");
     const outputPath =
       executeResult.outputFile || getClaudeExecutionOutputPath();
+
+    console.log(`Looking for output file at: ${outputPath}`);
+    
+    // Check if output file exists
+    const fileExists = await fs.promises.access(outputPath).then(() => true).catch(() => false);
+    console.log(`Output file exists: ${fileExists}`);
+
+    if (!fileExists) {
+      console.log("No output file found, posting fallback message...");
+      // Post a fallback message when no output file is available
+      const provider = await import("../providers/provider-factory");
+      const scmProvider = provider.createProvider({
+        platform: "gitlab",
+        token: provider.getToken(),
+      });
+
+      const fallbackMessage = `## 🤖 Claude's Response
+
+⚠️ Claude execution completed but no output was captured. This might be due to:
+- Network connectivity issues
+- API authentication problems
+- Timeout or processing errors
+
+Please check the pipeline logs for more details.
+
+---
+*This is a fallback message - Claude execution may have failed.*`;
+
+      await scmProvider.createComment(fallbackMessage);
+      console.log("✅ Posted fallback message to GitLab");
+      return;
+    }
 
     try {
       const outputContent = await fs.promises.readFile(outputPath, "utf-8");
