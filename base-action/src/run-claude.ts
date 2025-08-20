@@ -193,6 +193,7 @@ To set these in GitLab:
       timeout: 35000, // 35 second timeout
     });
     
+    console.log(testResult.stdout);
     if (testResult.stdout.includes("I'm Claude") || testResult.stdout.trim().length > 0) {
       console.log("✅ Authentication test successful - Claude CLI responded");
     } else {
@@ -219,16 +220,34 @@ To set these in GitLab:
   // Output to console
   console.log(`Running Claude with prompt from file: ${config.promptPath}`);
 
+  // Create a named pipe
+  console.log("Creating named pipe...");
+  try {
+    await unlink(PIPE_PATH);
+  } catch (e) {
+    // Ignore if file doesn't exist
+  }
+
+  // Create the named pipe
+  console.log(`Creating named pipe at: ${PIPE_PATH}`);
+  await execAsync(`mkfifo "${PIPE_PATH}"`);
+  console.log("✅ Named pipe created successfully");
+
   // Start sending prompt to pipe in background
+  console.log("Starting cat process to read prompt file...");
   const catProcess = spawn("cat", [config.promptPath], {
     stdio: ["ignore", "pipe", "inherit"],
   });
   const pipeStream = createWriteStream(PIPE_PATH);
   catProcess.stdout.pipe(pipeStream);
 
-  catProcess.on("error", (error) => {
+  catProcess.on("error", (error: any) => {
     console.error("Error reading prompt file:", error);
     pipeStream.destroy();
+  });
+
+  catProcess.on("close", (code) => {
+    console.log(`Cat process finished with code: ${code}`);
   });
 
   console.log("Spawning Claude CLI process...");
@@ -267,9 +286,22 @@ To set these in GitLab:
     console.log("✅ Claude CLI process spawned successfully");
   });
 
+  // Add early exit detection
+  claudeProcess.on("close", (code, signal) => {
+    console.log(`Claude process exited early with code: ${code}, signal: ${signal}`);
+  });
+
   // Capture output for parsing execution metrics
   let output = "";
+  let hasReceivedOutput = false;
   claudeProcess.stdout.on("data", (data) => {
+    hasReceivedOutput = true;
+    console.log("📥 Received data from Claude CLI");
+    
+    // Log first few characters for debugging
+    const preview = data.toString().substring(0, 100);
+    console.log(`Data preview: ${preview}${data.toString().length > 100 ? '...' : ''}`);
+    
     const text = data.toString();
 
     // Try to parse as JSON and pretty print if it's on a single line
@@ -303,14 +335,31 @@ To set these in GitLab:
   });
 
   // Pipe from named pipe to Claude
+  console.log("Starting pipe process to connect named pipe to Claude stdin...");
   const pipeProcess = spawn("cat", [PIPE_PATH]);
   pipeProcess.stdout.pipe(claudeProcess.stdin);
+  
+  pipeProcess.on("spawn", () => {
+    console.log("✅ Pipe process spawned successfully");
+  });
+
+  pipeProcess.on("close", (code) => {
+    console.log(`Pipe process finished with code: ${code}`);
+  });
 
   // Handle pipe process errors
-  pipeProcess.on("error", (error) => {
+  pipeProcess.on("error", (error: any) => {
     console.error("Error reading from named pipe:", error);
     claudeProcess.kill("SIGTERM");
   });
+
+  // Add a timeout check to see if we're getting stuck
+  setTimeout(() => {
+    if (!hasReceivedOutput) {
+      console.error("⚠️  No output received from Claude after 10 seconds - process may be stuck");
+      console.error("This usually indicates authentication or network issues");
+    }
+  }, 10000);
 
   // Wait for Claude to finish with timeout
   let timeoutMs = 10 * 60 * 1000; // Default 10 minutes
