@@ -339,6 +339,7 @@ async function runGitLab() {
 
     // Create prompt directory
     const promptDir = getClaudePromptsDirectory();
+    console.log(`Prompt dir: ${promptDir}`);
 
     // Extract trigger comment from webhook payload
     let triggerComment = "";
@@ -478,6 +479,7 @@ ${directPrompt || "Please help with the requested task."}`;
     }
 
     // Write prompt file
+    console.log("Start writing into prompt dir...");
     const fs = await import("fs");
     await fs.promises.writeFile(`${promptDir}/claude-prompt.txt`, prompt);
     console.log("✅ Created prompt file for Claude");
