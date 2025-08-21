@@ -384,7 +384,7 @@ Please check the pipeline logs for more details.
 
     try {
       const outputContent = await fs.promises.readFile(outputPath, "utf-8");
-
+      console.log(`Output content: ${outputContent}`);
       // Parse the JSONL output (multiple JSON objects separated by newlines)
       const lines = outputContent.trim().split("\n");
       let claudeMessage = "";
