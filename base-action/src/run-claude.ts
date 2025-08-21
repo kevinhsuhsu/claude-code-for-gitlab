@@ -416,6 +416,9 @@ To set these in GitLab:
     try {
       await writeFile("output.txt", output);
 
+      // Ensure the .claude-temp directory exists
+      await execAsync("mkdir -p .claude-temp");
+
       // Process output.txt into JSON and save to execution file
       const { stdout: jsonOutput } = await execAsync("jq -s '.' output.txt");
       await writeFile(EXECUTION_FILE, jsonOutput);
@@ -434,6 +437,8 @@ To set these in GitLab:
     if (output) {
       try {
         await writeFile("output.txt", output);
+        // Ensure the .claude-temp directory exists
+        await execAsync("mkdir -p .claude-temp");
         const { stdout: jsonOutput } = await execAsync("jq -s '.' output.txt");
         await writeFile(EXECUTION_FILE, jsonOutput);
         core.setOutput("execution_file", EXECUTION_FILE);
