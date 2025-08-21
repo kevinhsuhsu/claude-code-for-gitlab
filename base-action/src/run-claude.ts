@@ -417,20 +417,30 @@ To set these in GitLab:
     try {
       await writeFile("output.txt", output);
 
-      // Process the stream-json output into a proper JSON array
-      const lines = output.split('\n').filter(line => line.trim());
-      const jsonObjects = [];
+      // Process the stream-json output to remove empty lines and validate JSON
+      const lines = output.split('\n');
+      const validLines = [];
       
-      for (const line of lines) {
+      console.log(`Processing ${lines.length} lines of output`);
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
         try {
-          const parsed = JSON.parse(line);
-          jsonObjects.push(parsed);
+          // Validate that the line is valid JSON
+          JSON.parse(line);
+          validLines.push(line);
         } catch (parseError) {
-          console.log(`Skipping invalid JSON line: ${line.substring(0, 100)}...`);
+          console.log(`Line ${i + 1}: Skipping invalid JSON - ${(parseError as Error).message}`);
+          console.log(`Line content (first 200 chars): ${line.substring(0, 200)}...`);
         }
       }
+      
+      console.log(`Successfully validated ${validLines.length} JSON lines`);
 
-      const jsonOutput = JSON.stringify(jsonObjects, null, 2);
+      // Keep the original stream-json format (one JSON object per line)
+      const jsonOutput = validLines.join('\n');
       await writeFile(EXECUTION_FILE, jsonOutput);
 
       console.log(`Log saved to ${EXECUTION_FILE}`);
@@ -448,20 +458,25 @@ To set these in GitLab:
       try {
         await writeFile("output.txt", output);
         
-        // Process the stream-json output into a proper JSON array
-        const lines = output.split('\n').filter(line => line.trim());
-        const jsonObjects = [];
+        // Process the stream-json output to remove empty lines and validate JSON
+        const lines = output.split('\n');
+        const validLines = [];
         
         for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine) continue;
+          
           try {
-            const parsed = JSON.parse(line);
-            jsonObjects.push(parsed);
+            // Validate that the line is valid JSON
+            JSON.parse(trimmedLine);
+            validLines.push(trimmedLine);
           } catch (parseError) {
             // Ignore parsing errors during failure handling
           }
         }
 
-        const jsonOutput = JSON.stringify(jsonObjects, null, 2);
+        // Keep the original stream-json format (one JSON object per line)
+        const jsonOutput = validLines.join('\n');
         await writeFile(EXECUTION_FILE, jsonOutput);
         core.setOutput("execution_file", EXECUTION_FILE);
       } catch (e) {
