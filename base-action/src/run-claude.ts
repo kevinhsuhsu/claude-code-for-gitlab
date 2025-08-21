@@ -417,8 +417,20 @@ To set these in GitLab:
     try {
       await writeFile("output.txt", output);
 
-      // Process output.txt into JSON and save to execution file
-      const { stdout: jsonOutput } = await execAsync("jq -s '.' output.txt");
+      // Process the stream-json output into a proper JSON array
+      const lines = output.split('\n').filter(line => line.trim());
+      const jsonObjects = [];
+      
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line);
+          jsonObjects.push(parsed);
+        } catch (parseError) {
+          console.log(`Skipping invalid JSON line: ${line.substring(0, 100)}...`);
+        }
+      }
+
+      const jsonOutput = JSON.stringify(jsonObjects, null, 2);
       await writeFile(EXECUTION_FILE, jsonOutput);
 
       console.log(`Log saved to ${EXECUTION_FILE}`);
@@ -435,7 +447,21 @@ To set these in GitLab:
     if (output) {
       try {
         await writeFile("output.txt", output);
-        const { stdout: jsonOutput } = await execAsync("jq -s '.' output.txt");
+        
+        // Process the stream-json output into a proper JSON array
+        const lines = output.split('\n').filter(line => line.trim());
+        const jsonObjects = [];
+        
+        for (const line of lines) {
+          try {
+            const parsed = JSON.parse(line);
+            jsonObjects.push(parsed);
+          } catch (parseError) {
+            // Ignore parsing errors during failure handling
+          }
+        }
+
+        const jsonOutput = JSON.stringify(jsonObjects, null, 2);
         await writeFile(EXECUTION_FILE, jsonOutput);
         core.setOutput("execution_file", EXECUTION_FILE);
       } catch (e) {
