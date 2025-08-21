@@ -223,21 +223,46 @@ To set these in GitLab:
   await execAsync(`mkfifo "${PIPE_PATH}"`);
   console.log("✅ Named pipe created successfully");
 
+  // Check if prompt file exists and is readable
+  console.log(`Checking prompt file: ${config.promptPath}`);
+  try {
+    const stats = await stat(config.promptPath);
+    console.log(`✅ Prompt file exists, size: ${stats.size} bytes`);
+  } catch (error) {
+    console.error(`❌ Cannot access prompt file: ${error}`);
+    throw new Error(`Prompt file not accessible: ${config.promptPath}`);
+  }
+
   // Start sending prompt to pipe in background
   console.log("Starting cat process to read prompt file...");
   const catProcess = spawn("cat", [config.promptPath], {
-    stdio: ["ignore", "pipe", "inherit"],
+    stdio: ["ignore", "pipe", "pipe"], // Capture stderr
   });
+  
+  console.log("✅ Cat process started");
+
+  // Monitor cat process stderr
+  catProcess.stderr?.on("data", (data: any) => {
+    console.error(`Cat stderr: ${data.toString()}`);
+  });
+
   const pipeStream = createWriteStream(PIPE_PATH);
+  console.log("✅ Created write stream to named pipe");
+  
   catProcess.stdout.pipe(pipeStream);
+  console.log("✅ Connected cat stdout to pipe stream");
 
   catProcess.on("error", (error: any) => {
-    console.error("Error reading prompt file:", error);
+    console.error("❌ Error in cat process:", error);
     pipeStream.destroy();
   });
 
+  catProcess.on("spawn", () => {
+    console.log("✅ Cat process spawned successfully");
+  });
+
   catProcess.on("close", (code) => {
-    console.log(`Cat process finished with code: ${code}`);
+    console.log(`🔚 Cat process finished with code: ${code}`);
   });
 
   console.log("Spawning Claude CLI process...");
