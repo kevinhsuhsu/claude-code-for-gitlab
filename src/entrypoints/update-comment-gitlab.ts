@@ -17,7 +17,28 @@ async function getExecutionDetails(outputFile?: string): Promise<{
   if (!outputFile) return null;
   try {
     const fileContent = await fs.readFile(outputFile, "utf8");
-    const outputData = JSON.parse(fileContent) as SDKMessage[];
+    
+    // Handle both JSON array format and stream-json format (one JSON per line)
+    let outputData: SDKMessage[];
+    
+    // Try to parse as JSON array first
+    try {
+      outputData = JSON.parse(fileContent) as SDKMessage[];
+    } catch {
+      // If that fails, try parsing as stream-json format (one JSON object per line)
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      outputData = [];
+      
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line) as SDKMessage;
+          outputData.push(parsed);
+        } catch (parseError) {
+          // Skip invalid JSON lines
+          core.warning(`Skipping invalid JSON line: ${line.substring(0, 100)}...`);
+        }
+      }
+    }
 
     const result = outputData.find(
       (msg): msg is Extract<SDKMessage, { type: "result" }> =>
