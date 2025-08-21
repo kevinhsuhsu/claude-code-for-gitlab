@@ -9,7 +9,6 @@ const execAsync = promisify(exec);
 
 // Use platform-agnostic temp directory
 const TEMP_DIR = process.env.RUNNER_TEMP || process.env.CI_BUILDS_DIR || "/tmp";
-const PIPE_PATH = `${TEMP_DIR}/claude_prompt_pipe`;
 const EXECUTION_FILE = `${TEMP_DIR}/claude-execution-output.json`;
 const BASE_ARGS = ["-p", "--verbose", "--output-format", "stream-json"];
 
@@ -210,19 +209,6 @@ To set these in GitLab:
   // Output to console
   console.log(`Running Claude with prompt from file: ${config.promptPath}`);
 
-  // Create a named pipe
-  console.log("Creating named pipe...");
-  try {
-    await unlink(PIPE_PATH);
-  } catch (e) {
-    // Ignore if file doesn't exist
-  }
-
-  // Create the named pipe
-  console.log(`Creating named pipe at: ${PIPE_PATH}`);
-  await execAsync(`mkfifo "${PIPE_PATH}"`);
-  console.log("✅ Named pipe created successfully");
-
   // Check if prompt file exists and is readable
   console.log(`Checking prompt file: ${config.promptPath}`);
   try {
@@ -232,38 +218,6 @@ To set these in GitLab:
     console.error(`❌ Cannot access prompt file: ${error}`);
     throw new Error(`Prompt file not accessible: ${config.promptPath}`);
   }
-
-  // Start sending prompt to pipe in background
-  console.log("Starting cat process to read prompt file...");
-  const catProcess = spawn("cat", [config.promptPath], {
-    stdio: ["ignore", "pipe", "pipe"], // Capture stderr
-  });
-  
-  console.log("✅ Cat process started");
-
-  // Monitor cat process stderr
-  catProcess.stderr?.on("data", (data: any) => {
-    console.error(`Cat stderr: ${data.toString()}`);
-  });
-
-  const pipeStream = createWriteStream(PIPE_PATH);
-  console.log("✅ Created write stream to named pipe");
-  
-  catProcess.stdout.pipe(pipeStream);
-  console.log("✅ Connected cat stdout to pipe stream");
-
-  catProcess.on("error", (error: any) => {
-    console.error("❌ Error in cat process:", error);
-    pipeStream.destroy();
-  });
-
-  catProcess.on("spawn", () => {
-    console.log("✅ Cat process spawned successfully");
-  });
-
-  catProcess.on("close", (code) => {
-    console.log(`🔚 Cat process finished with code: ${code}`);
-  });
 
   console.log("Spawning Claude CLI process...");
   const claudeProcess = spawn("claude", config.claudeArgs, {
@@ -277,7 +231,6 @@ To set these in GitLab:
   // Handle Claude process errors
   claudeProcess.on("error", (error: any) => {
     console.error("Error spawning Claude process:", error);
-    pipeStream.destroy();
   });
 
   // Monitor Claude stderr for authentication errors
@@ -350,24 +303,21 @@ To set these in GitLab:
     console.error("Error reading Claude stdout:", error);
   });
 
-  // Pipe from named pipe to Claude
-  console.log("Starting pipe process to connect named pipe to Claude stdin...");
-  const pipeProcess = spawn("cat", [PIPE_PATH]);
+  // Send prompt file directly to Claude stdin
+  console.log("Reading prompt file and sending to Claude stdin...");
   
-  pipeProcess.on("spawn", () => {
-    console.log("✅ Pipe process spawned successfully");
-    // Connect the pipe to Claude stdin after spawn
-    pipeProcess.stdout.pipe(claudeProcess.stdin);
-    console.log("🔗 Connected pipe output to Claude stdin");
-  });
-
-  pipeProcess.on("close", (code) => {
-    console.log(`🔚 Pipe process closed with code: ${code}`);
-  });
-
-  pipeProcess.on("error", (error: any) => {
-    console.error("❌ Error in pipe process:", error);
-    claudeProcess.kill("SIGTERM");
+  claudeProcess.on("spawn", () => {
+    console.log("✅ Claude CLI process spawned successfully");
+    console.log(`Claude command: claude ${config.claudeArgs.join(' ')}`);
+    
+    // Read prompt file and send to Claude stdin
+    const { readFileSync } = await import('fs');
+    const promptData = readFileSync(config.promptPath, 'utf8');
+    console.log(`📝 Read prompt data: ${promptData.length} characters`);
+    
+    claudeProcess.stdin.write(promptData);
+    claudeProcess.stdin.end();
+    console.log("✅ Sent prompt to Claude stdin and closed");
   });
 
   // Monitor Claude stdin events
@@ -393,8 +343,6 @@ To set these in GitLab:
       console.error("This usually indicates authentication or network issues");
       console.log("Debug info:");
       console.log(`- Claude process PID: ${claudeProcess.pid}`);
-      console.log(`- Pipe process PID: ${pipeProcess.pid}`);
-      console.log(`- Cat process PID: ${catProcess.pid}`);
     }
   }, 10000);
 
@@ -457,24 +405,7 @@ To set these in GitLab:
     });
   });
 
-  // Clean up processes
-  try {
-    catProcess.kill("SIGTERM");
-  } catch (e) {
-    // Process may already be dead
-  }
-  try {
-    pipeProcess.kill("SIGTERM");
-  } catch (e) {
-    // Process may already be dead
-  }
-
-  // Clean up pipe file
-  try {
-    await unlink(PIPE_PATH);
-  } catch (e) {
-    // Ignore errors during cleanup
-  }
+  // Clean up (no additional processes to clean up now)
 
   // Set conclusion based on exit code
   if (exitCode === 0) {
