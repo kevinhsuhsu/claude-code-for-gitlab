@@ -311,13 +311,18 @@ To set these in GitLab:
     console.log(`Claude command: claude ${config.claudeArgs.join(' ')}`);
     
     // Read prompt file and send to Claude stdin
-    const { readFileSync } = await import('fs');
-    const promptData = readFileSync(config.promptPath, 'utf8');
-    console.log(`📝 Read prompt data: ${promptData.length} characters`);
-    
-    claudeProcess.stdin.write(promptData);
-    claudeProcess.stdin.end();
-    console.log("✅ Sent prompt to Claude stdin and closed");
+    try {
+      const fs = require('fs');
+      const promptData = fs.readFileSync(config.promptPath, 'utf8');
+      console.log(`📝 Read prompt data: ${promptData.length} characters`);
+      
+      claudeProcess.stdin.write(promptData);
+      claudeProcess.stdin.end();
+      console.log("✅ Sent prompt to Claude stdin and closed");
+    } catch (error) {
+      console.error("❌ Error reading prompt file:", error);
+      claudeProcess.kill("SIGTERM");
+    }
   });
 
   // Monitor Claude stdin events
