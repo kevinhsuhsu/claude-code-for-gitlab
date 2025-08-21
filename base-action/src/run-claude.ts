@@ -9,7 +9,7 @@ import { getClaudeExecutionOutputPath } from "../../src/utils/temp-directory.js"
 const execAsync = promisify(exec);
 
 const EXECUTION_FILE = getClaudeExecutionOutputPath();
-const BASE_ARGS = ["-p", "--verbose", "--output-format", "stream-json", "--permission-mode", "bypassPermissions"];
+const BASE_ARGS = ["-p", "--verbose", "--output-format", "stream-json"];
 
 export type ClaudeOptions = {
   allowedTools?: string;
@@ -68,6 +68,7 @@ export function prepareRunConfig(
 ): PreparedConfig {
   const claudeArgs = [...BASE_ARGS];
 
+  conosle.log(`Allow tools: ${options.allowedTools}`);
   if (options.allowedTools) {
     claudeArgs.push("--allowedTools", options.allowedTools);
   }
