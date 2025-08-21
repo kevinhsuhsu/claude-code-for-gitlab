@@ -4,10 +4,11 @@ import { promisify } from "util";
 import { unlink, writeFile, stat } from "fs/promises";
 import { createWriteStream } from "fs";
 import { spawn } from "child_process";
+import { getClaudeExecutionOutputPath } from "../../src/utils/temp-directory.js";
 
 const execAsync = promisify(exec);
 
-const EXECUTION_FILE = "./.claude-temp/claude-execution-output.json";
+const EXECUTION_FILE = getClaudeExecutionOutputPath();
 const BASE_ARGS = ["-p", "--verbose", "--output-format", "stream-json"];
 
 export type ClaudeOptions = {
@@ -416,9 +417,6 @@ To set these in GitLab:
     try {
       await writeFile("output.txt", output);
 
-      // Ensure the .claude-temp directory exists
-      await execAsync("mkdir -p .claude-temp");
-
       // Process output.txt into JSON and save to execution file
       const { stdout: jsonOutput } = await execAsync("jq -s '.' output.txt");
       await writeFile(EXECUTION_FILE, jsonOutput);
@@ -437,8 +435,6 @@ To set these in GitLab:
     if (output) {
       try {
         await writeFile("output.txt", output);
-        // Ensure the .claude-temp directory exists
-        await execAsync("mkdir -p .claude-temp");
         const { stdout: jsonOutput } = await execAsync("jq -s '.' output.txt");
         await writeFile(EXECUTION_FILE, jsonOutput);
         core.setOutput("execution_file", EXECUTION_FILE);
