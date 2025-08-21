@@ -68,7 +68,7 @@ export function prepareRunConfig(
 ): PreparedConfig {
   const claudeArgs = [...BASE_ARGS];
 
-  conosle.log(`Allow tools: ${options.allowedTools}`);
+  console.log(`Allow tools: ${options.allowedTools}`);
   if (options.allowedTools) {
     claudeArgs.push("--allowedTools", options.allowedTools);
   }
