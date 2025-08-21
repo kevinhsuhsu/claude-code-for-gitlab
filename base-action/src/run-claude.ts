@@ -9,7 +9,7 @@ import { getClaudeExecutionOutputPath } from "../../src/utils/temp-directory.js"
 const execAsync = promisify(exec);
 
 const EXECUTION_FILE = getClaudeExecutionOutputPath();
-const BASE_ARGS = ["-p", "--verbose", "--output-format", "stream-json", "--permission-mode", "allow-all"];
+const BASE_ARGS = ["-p", "--verbose", "--output-format", "stream-json", "--permission-mode", "bypassPermissions"];
 
 export type ClaudeOptions = {
   allowedTools?: string;
